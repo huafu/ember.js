@@ -402,5 +402,5 @@ Ember.GroupableMixin = Ember.Mixin.create(Ember.MutableEnumerable, {
 });
 
 
-Ember.GroupableMixin.GroupContent = GroupedContent;
-Ember.GroupableMixin.GroupContentGroup = GroupedContentGroup;
+Ember.GroupableMixin.GroupedContent = GroupedContent;
+Ember.GroupableMixin.GroupedContentGroup = GroupedContentGroup;
