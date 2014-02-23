@@ -6,13 +6,14 @@
 var get = Ember.get, set = Ember.set, getProperties = Ember.getProperties,
     forEach = Ember.EnumerableUtils.forEach;
 
-
+// the base class used to create each group's array proxy in the groupedContent
 var GroupedContentGroup = Ember.ArrayProxy.extend(Ember.SortableMixin, {
   sortProperties: Ember.computed.oneWay('parentController.sortProperties'),
   sortAscending: Ember.computed.oneWay('parentController.sortAscending'),
   sortFunction: Ember.computed.oneWay('parentController.sortFunction')
 });
 
+// the based class used to create the groupedContent array proxy
 var GroupedContent = Ember.ArrayProxy.extend(Ember.SortableMixin, {
   sortProperties: Ember.computed.oneWay('parentController.groupedContentSortProperties'),
   sortAscending: Ember.computed.oneWay('parentController.groupedContentSortAscending'),
@@ -112,24 +113,32 @@ Ember.GroupableMixin = Ember.Mixin.create(Ember.MutableEnumerable, {
     Ember.assert("groupProperties must be null or an array", !groupProperties || Ember.typeOf(groupProperties) === 'array');
     groups = [];
     if (content && isGrouped) {
+      // we need to handle groups
       forEach(content, function(object) {
+        // grab the values our group depends on
         values = getProperties(object, groupProperties);
+        // try to find our group
         if (!(group = self._gmFindGroup(groups, groupProperties, values))) {
+          // group not found, we need to create it and add it to all the groups
           group = self._gmCreateGroup(values);
           groups.push(group);
         }
+        // add our object to the group content
         group.pushObject(object);
+        // setup observers on each property the grouping depends on
         forEach(groupProperties, function(key) {
           addBeforeObserver(object, key, self, 'contentItemGroupPropertyWillChange');
           addObserver(object, key, self, 'contentItemGroupPropertyDidChange');
         });
       });
     } else {
+      // no need to handle groups, just create one group holding the same content
       groups.push(groupedContentGroupClass.createWithMixins({
         parentController: self,
         content: Ember.computed.oneWay('parentController.content')
       }));
     }
+    // finally create the groupedContent array proxy
     return groupedContentClass.create({
       parentController: this,
       content: groups
@@ -140,6 +149,7 @@ Ember.GroupableMixin = Ember.Mixin.create(Ember.MutableEnumerable, {
    @inheritedDoc
    */
   destroy: function() {
+    // we need to remove all observers we may have setup
     this._gmRemoveAllContentItemObservers();
     return this._super();
   },
@@ -148,6 +158,7 @@ Ember.GroupableMixin = Ember.Mixin.create(Ember.MutableEnumerable, {
    @inheritedDoc
    */
   _contentWillChange: Ember.beforeObserver('content', function() {
+    // be sure to remove all observers first
     this._gmRemoveAllContentItemObservers();
     return this._super();
   }),
@@ -165,19 +176,24 @@ Ember.GroupableMixin = Ember.Mixin.create(Ember.MutableEnumerable, {
           groupProperties = props.groupProperties,
           groupedContent = props.groupedContent,
           groups = get(groupedContent, 'content');
+      // loop on al the removed objects
       forEach(removed, function(object) {
+        // try ot find the group for that object
         group = self._gmFindGroup(groups, groupProperties, getProperties(object, groupProperties));
         if (group) {
+          // it has a group, remove the object from it and add the group to the list of groups to delete if it's empty
           group.removeObject(object);
           if (get(group, 'length') < 1) {
             groupsToRemove.push(group);
           }
         }
+        // remove the observers we setup before
         forEach(groupProperties, function(key) {
           Ember.removeObserver(object, key, self, 'contentItemGroupPropertyDidChange');
           Ember.removeBeforeObserver(object, key, self, 'contentItemGroupPropertyWillChange');
         });
       });
+      // remove any empty group and then destroy them
       groupsToRemove = groupsToRemove.uniq();
       groupedContent.removeObjects(groupsToRemove);
       groupsToRemove.invoke('destroy');
@@ -198,19 +214,26 @@ Ember.GroupableMixin = Ember.Mixin.create(Ember.MutableEnumerable, {
           groupProperties = props.groupProperties,
           groupedContent = props.groupedContent,
           groups = get(groupedContent, 'content');
+      // loop on al added objects
       forEach(added, function(object) {
+        // grab values the grouping depends on
         values = getProperties(object, groupProperties);
+        // find if there is a group that should hold us
         group = self._gmFindGroup(groups, groupProperties, values);
         if (!group) {
+          // couldn't find a group for that object, create one and add it to the list of groups to add
           group = self._gmCreateGroup(values);
           groupsToAdd.push(group);
         }
+        // add the object to the group
         group.addObject(object);
+        // setup our observers
         forEach(groupProperties, function(key) {
           Ember.addBeforeObserver(object, key, self, 'contentItemGroupPropertyWillChange');
           Ember.addObserver(object, key, self, 'contentItemGroupPropertyDidChange');
         });
       });
+      // add all created groups at once
       groupedContent.pushObjects(groupsToAdd);
     }
     return this._super.apply(this, arguments);
@@ -230,8 +253,10 @@ Ember.GroupableMixin = Ember.Mixin.create(Ember.MutableEnumerable, {
           groupedContent = props.groupedContent,
           groupProperties = props.groupProperties;
       groups = get(groupedContent, 'content');
+      // find the group for that object
       group = this._gmFindGroup(groups, groupProperties, getProperties(object, groupProperties));
       if (group) {
+        // remove that object from this group and remove+destroy the group if it's then empty
         group.removeObject(object);
         if (get(group, 'length') < 1) {
           groupedContent.removeObject(group);
@@ -254,12 +279,16 @@ Ember.GroupableMixin = Ember.Mixin.create(Ember.MutableEnumerable, {
           groupedContent = props.groupedContent,
           groupProperties = props.groupProperties;
       groups = get(groupedContent, 'content');
+      // grab our values on which the grouping depends
       values = getProperties(object, groupProperties);
+      // find the appropriate group for that object
       group = this._gmFindGroup(groups, groupProperties, values);
       if (!group) {
+        // create the group if none is found, and add it to all the groups
         group = this._gmCreateGroup(values);
         groupedContent.pushObject(group);
       }
+      // add the object to the group
       group.pushObject(object);
     }
   },
@@ -315,6 +344,7 @@ Ember.GroupableMixin = Ember.Mixin.create(Ember.MutableEnumerable, {
         content = props.content,
         groupProperties = props.groupProperties;
     if (content && groupProperties) {
+      // remove all observers from all objects in th content
       forEach(content, function(object) {
         forEach(groupProperties, function(key) {
           Ember.removeObserver(object, key, self, 'contentItemGroupPropertyDidChange');
@@ -336,14 +366,17 @@ Ember.GroupableMixin = Ember.Mixin.create(Ember.MutableEnumerable, {
   _gmFindGroup: function(groups, propNames, propValues) {
     var found = void(0);
     forEach(groups, function(group) {
+      // get the properties of the object on which depends the grouping
       var given = getProperties(group, propNames), ok = true;
       forEach(propNames, function(key) {
         if (given[key] !== propValues[key]) {
+          // if one property isn't matching, stop checking others
           ok = false;
           return false;
         }
       });
       if (ok) {
+        // we got our group, update the `found` and stop searching
         found = group;
         return false;
       }
